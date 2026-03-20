@@ -2,6 +2,7 @@
 
 from py3xui.api.api_base import ApiFields
 from py3xui.async_api.async_api_base import AsyncBaseApi
+from py3xui.server.config import ServerConfig, XrayVersionUnavailableError
 from py3xui.server.server import RealityKeyPair, Server
 
 
@@ -121,3 +122,93 @@ class AsyncServerApi(AsyncBaseApi):
 
         self.logger.debug("Reality keys generated: %s", keys_json)
         return RealityKeyPair.model_validate(keys_json)
+
+    async def install_new_xray_version(self, version: str) -> None:
+        """Installs a new version of Xray on the server.
+
+        Arguments:
+            version (str): The version of Xray to install (e.g. "1.5.0").
+        """
+        endpoint = f"panel/api/server/installXray/{version}"
+        headers = {"Accept": "application/json"}
+        url = self._url(endpoint)
+        self.logger.info("Installing new Xray version %s...", version)
+
+        await self._post(url, headers, data={})
+
+        self.logger.info("Xray version %s installed successfully.", version)
+
+    async def update_geofile(self) -> None:
+        """Triggers an update of the geofile on the server."""
+
+        endpoint = "panel/api/server/updateGeofile"
+        headers = {"Accept": "application/json"}
+        url = self._url(endpoint)
+        self.logger.info("Updating geofile...")
+
+        await self._post(url, headers, data={})
+
+        self.logger.info("Geofile updated successfully.")
+
+    async def get_xray_version(self) -> list[str]:
+        """Gets the current version of Xray running on the server.
+
+        Returns:
+            list[str]: The version of Xray.
+
+        Examples:
+            ```python
+            import py3xui
+
+            api = py3xui.AsyncApi.from_env()
+            await api.login()
+
+            xray_version = await api.server.get_xray_version()
+            print(f"Xray Version: {xray_version}")
+            ```
+        """
+        endpoint = "panel/api/server/getXrayVersion"
+        headers = {"Accept": "application/json"}
+        url = self._url(endpoint)
+        self.logger.info("Getting Xray version...")
+
+        response = await self._get(url, headers)
+        versions_json = response.json().get(ApiFields.OBJ)
+
+        if versions_json is None:
+            raise XrayVersionUnavailableError("Xray version was not returned by the server.")
+
+        self.logger.debug("Xray version: %s", versions_json)
+        return versions_json
+
+    async def get_server_config(self) -> ServerConfig:
+        """Gets the current server configuration.
+
+        Returns:
+            ServerConfig: The server configuration.
+        
+        Examples:
+            ```python
+            import py3xui
+
+            api = py3xui.AsyncApi.from_env()
+            await api.login()
+
+            config = await api.server.get_server_config()
+            print(f"Inbounds: {config.inbounds}")
+            print(f"Transport is used: {config.transport}")
+            ```
+        """
+        endpoint = "panel/api/server/getConfigJson"
+        headers = {"Accept": "application/json"}
+        url = self._url(endpoint)
+        self.logger.info("Getting server config...")
+
+        response = await self._get(url, headers)
+        config_json = response.json().get(ApiFields.OBJ)
+
+        if not config_json:
+            raise ValueError("Server config was not returned by the server.")
+
+        self.logger.debug("Server config: %s", config_json)
+        return ServerConfig.model_validate(config_json)
